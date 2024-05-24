@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace RefTest.OSC
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    public struct HT_CONTROL_DATA
+    public struct PCONTROLDATA
     {
         public ushort nCHSet;             // WORD -> ushort
         public ushort nTimeDIV;           // WORD -> ushort
