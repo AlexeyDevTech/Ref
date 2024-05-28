@@ -13,25 +13,26 @@ namespace RefTest
         {
             try
             {
-                var res = OSCControl.Instance.Init();
+                var inst = OSCControlFactory.Get(OSCControlType.Mock);
+                var res = inst.Init();
                 await Console.Out.WriteLineAsync(res.ToString());
                 if (res)
                 {
 
-                    Console.WriteLine(OSCControl.Instance.GetHTriggerLevel());
+                    Console.WriteLine(inst.GetHTriggerLevel());
                     Stopwatch sw = new Stopwatch();
-                    OSCControl.Instance.Start();
+                    inst.Start();
                     sw.Start();
-                    OSCControl.Instance.DataReceived += data =>
+                    inst.DataReceived += data =>
                     {
                         Console.WriteLine($"Data received in {sw.Elapsed}");
                         if(sw.Elapsed > TimeSpan.FromSeconds(5))
                         {
-                            OSCControl.Instance.Pause();
+                            inst.Stop();
                             Console.WriteLine("Task paused... Wait 3 sec");
                             Thread.Sleep(3000);
                             sw.Restart();
-                            OSCControl.Instance.Play();
+                            inst.Start();
                         }
                     };
 

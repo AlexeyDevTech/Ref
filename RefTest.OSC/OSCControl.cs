@@ -9,9 +9,7 @@ using System.Threading.Tasks;
 
 namespace RefTest.OSC
 {
-
-    public delegate void OSCDataReceivedEventHandler(ushort[] data);
-    public class OSCControl
+    public class OSCControl : IOSCControl
     {
         public event OSCDataReceivedEventHandler DataReceived;
 
@@ -226,13 +224,13 @@ namespace RefTest.OSC
             return res;
         }
 
-        bool SetSampleRate(YTFormat format)
+        public bool SetSampleRate(YTFormat format)
         {
             if (OSCImport.dsoHTSetSampleRate(deviceIndex, (ushort)format, ref relayControl, ref stControl) != 0) return false;
             if (OSCImport.dsoHTSetCHAndTrigger(0, ref relayControl, stControl.nTimeDIV) != 0) return false;
             return true;
         }
-        bool SetSampleRate(TimeDiv td, YTFormat format)
+        public bool SetSampleRate(TimeDiv td, YTFormat format)
         {
             var utd = (ushort)td;
             if (stControl.nTimeDIV != utd) stControl.nTimeDIV = utd;
