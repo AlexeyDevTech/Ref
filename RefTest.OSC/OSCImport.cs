@@ -40,8 +40,10 @@ namespace RefTest.OSC
 
 
         [DllImport("HTHardDll.dll", EntryPoint = "dsoHTSetCHAndTrigger", CallingConvention = CallingConvention.Cdecl)]
-        public static extern ushort dsoHTSetCHAndTrigger(ushort nDeviceIndex, IntPtr pRelayControl, ushort nTimeDIV);
+        public static extern ushort dsoHTSetCHAndTrigger(ushort nDeviceIndex, ref RELAYCONTROL pRelayControl, ushort nTimeDIV);
 
+        [DllImport("HTHardDll.dll", EntryPoint = "dsoHTSetRamAndTrigerControl", CallingConvention = CallingConvention.Cdecl)]
+        public static extern ushort dsoHTSetRamAndTrigerControl(ushort DeviceIndex, ushort nTimeDiv, ushort nCHset, ushort nTrigerSource, ushort nPeak);
 
         [DllImport("HTHardDll.dll", EntryPoint = "dsoHTSetCHAndTriggerDirect", CallingConvention = CallingConvention.Cdecl)]
         public static extern ushort dsoHTSetCHAndTriggerDirect(ushort nDeviceIndex, IntPtr pRelayControl, ushort uDirect, ushort nDriverCode);
