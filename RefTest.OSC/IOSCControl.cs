@@ -12,11 +12,14 @@ namespace RefTest.OSC
     {
         event OSCDataReceivedEventHandler DataReceived;
 
+
+        ushort GetVersion();
         bool Init();
         float GetSampleRate();
         bool SetVoltDiv(VoltDiv vd);
         TimeDiv GetTimeDiv();
         VoltDiv GetVoltDiv();
+
         ushort GetVTriggerLevel();
         ushort GetHTriggerLevel();
         bool SetVTriggerLevel(byte level);

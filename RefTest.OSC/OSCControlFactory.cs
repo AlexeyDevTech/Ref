@@ -15,14 +15,31 @@ namespace RefTest.OSC
 
     public static class OSCControlFactory
     {
-        public static IOSCControl Get(OSCControlType type)
+        private static IOSCControl _instance;
+
+        public static IOSCControl Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    throw new InvalidOperationException("Instance is not set. Call SetInstance first.");
+                }
+                return _instance;
+            }
+        }
+
+
+        public static void SetInstance(OSCControlType type)
         {
             switch (type)
             {
                 case OSCControlType.Original:
-                    return OSCControl.Instance;
+                    _instance = OSCControl.Instance;
+                    break;
                 case OSCControlType.Mock:
-                    return OSCControlMock.Instance;
+                    _instance = OSCControlMock.Instance;
+                    break;
                 default:
                     throw new ArgumentException("Invalid OSCControlType");
             }

@@ -114,5 +114,10 @@ namespace RefTest.OSC
         public bool SetSampleRate(YTFormat format) => true;
 
         public bool SetSampleRate(TimeDiv timeDiv, YTFormat format) => true;
+
+        public ushort GetVersion()
+        {
+            return ushort.Parse("20240529");
+        }
     }
 }

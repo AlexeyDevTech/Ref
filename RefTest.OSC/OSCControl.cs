@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -19,7 +20,13 @@ namespace RefTest.OSC
         ManualResetEvent WorkerWaiter = new ManualResetEvent(true);
 
 
+
+        bool IsConnect = false;
+
+
+      
         private static OSCControl _instance;
+        int failConnectCounter = 3;
         ushort deviceIndex = 32;                //значение по умолчанию (Init() == false если ничего не нашел)
         ushort ver = 0;
         ushort chMode = 1;
@@ -84,7 +91,28 @@ namespace RefTest.OSC
         }
         private OSCControl()
         {
-            
+            Task.Run(ConnectWorker);
+        }
+
+        private void ConnectWorker()
+        {
+            while (true)
+            {
+                if(!IsConnect) //Если не подключено
+                {
+
+                }
+            }
+        }
+
+        private void FailConnectRegister()
+        {
+            failConnectCounter--;
+            if(failConnectCounter < 0)
+            {
+                deviceIndex = 32;
+                failConnectCounter = 3;
+            }
         }
 
         private void Worker(CancellationToken token)
@@ -123,21 +151,12 @@ namespace RefTest.OSC
 
         public bool Init()
         {
+
+            //здесь были методы
+            //SearchDevices()
+            //Connect()
+            //GetVersion()
             
-            var devices = SearchDevices();
-            //определяем индекс подключенного устройства
-            for (int i = 0; i < devices.Length; i++)            
-            {
-                if (devices[i] != 0)
-                {
-                    deviceIndex = ushort.Parse(i.ToString());
-                    break;
-                }
-            }
-            if (deviceIndex == 32) return false;
-            if (!Connect()) return false;
-            ver = GetVersion();
-            if (ver == 0) return false;
             OSCImport.dsoSetUSBBus(deviceIndex);
             if (!OSCImport.dsoInitHard(deviceIndex)) return false;
             if (OSCImport.dsoHTADCCHModGain(deviceIndex, chMode) == 0) return false;
@@ -153,13 +172,38 @@ namespace RefTest.OSC
             return true;
         }
 
-        private ushort GetVersion()
+        public bool SearchAndConnectCheck()
+        {
+
+            if (!SearchDeviceIndex(out deviceIndex)) return false;
+            if (!Connect(deviceIndex)) return false;
+            return true;
+        }
+
+        public bool SearchDeviceIndex(out ushort DeviceIndex)
+        {
+            DeviceIndex = 32;
+            var devices = SearchDevices();
+            //определяем индекс подключенного устройства
+            for (int i = 0; i < devices.Length; i++)
+            {
+                if (devices[i] != 0)
+                {
+                    DeviceIndex = ushort.Parse(i.ToString());
+                    break;
+                }
+            }
+            if (DeviceIndex == 32) return false;
+            return true;
+        }
+
+        public ushort GetVersion()
         {
             return OSCImport.dsoGetFPGAVersion(deviceIndex);
         }
-        private bool Connect()
+        private bool Connect(ushort DeviceIndex)
         {
-            var con = OSCImport.dsoHTDeviceConnect(deviceIndex);
+            var con = OSCImport.dsoHTDeviceConnect(DeviceIndex);
             if (con == 1) return true;
             else return false;
         }
