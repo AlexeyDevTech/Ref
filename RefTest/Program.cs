@@ -1,8 +1,5 @@
-﻿
-
-using RefTest.OSC;
+﻿using RefTest.OSC;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace RefTest
@@ -14,7 +11,8 @@ namespace RefTest
             try
             {
                 OSCControlFactory.SetInstance(OSCControlType.Original);
-                
+
+                OSCControlFactory.Instance.Connect();
                 
             }
             catch (AccessViolationException)

@@ -12,9 +12,12 @@ namespace RefTest.OSC
     {
         event OSCDataReceivedEventHandler DataReceived;
 
+        bool SingleConnect { get; set; }
 
+        void Connect();
+        void StopConnect();
         ushort GetVersion();
-        bool Init();
+        Task<bool> Init();
         float GetSampleRate();
         bool SetVoltDiv(VoltDiv vd);
         TimeDiv GetTimeDiv();

@@ -22,9 +22,12 @@ namespace RefTest.OSC
 
 
         bool IsConnect = false;
+        public bool SingleConnect { get; set; } = false; //возможность управлять потоком подключения, либо после
+                                                         //запуска он останавливается, 
+                                                         //либо после запуска и последующего отключения он будет 
+                                                         //продолжать искать прибор
 
 
-      
         private static OSCControl _instance;
         int failConnectCounter = 3;
         ushort deviceIndex = 32;                //значение по умолчанию (Init() == false если ничего не нашел)
@@ -77,7 +80,7 @@ namespace RefTest.OSC
             nTrigSource = 0,
             nALT = 0
         };
-        
+        private bool CanConnectWorker = false;
 
         public static OSCControl Instance {
             get
@@ -91,18 +94,43 @@ namespace RefTest.OSC
         }
         private OSCControl()
         {
-            Task.Run(ConnectWorker);
+            
         }
 
         private void ConnectWorker()
         {
-            while (true)
-            {
-                if(!IsConnect) //Если не подключено
+            
+                while (CanConnectWorker)
                 {
+                    if (!IsConnect) //Если не подключено
+                    {
+                        if (SearchDeviceIndex(out deviceIndex)) //поиск устройства 
+                            if (ConnectDevice(deviceIndex))
+                            {
+                                Console.WriteLine("Подключение установлено");
+                                IsConnect = true;
+                            }
+                                
+                    }
+                    else
+                    {
+                    //некая полезная нагрузка 
 
+                        var is_con = ConnectDevice(deviceIndex);
+                        if (!is_con)            
+                        {                        
+                            Console.WriteLine("Подключение разорвано");
+                            IsConnect = false;
+                            if (SingleConnect)
+                            {
+                                StopConnect();
+                                break;  
+                            }
+                        }
+                    }
+
+                    Task.Delay(1000);
                 }
-            }
         }
 
         private void FailConnectRegister()
@@ -115,6 +143,11 @@ namespace RefTest.OSC
             }
         }
 
+
+        /// <summary>
+        /// метод для непрерывного считывания данных из осциллографа
+        /// </summary>
+        /// <param name="token">токен отмены задачи</param>
         private void Worker(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
@@ -149,14 +182,36 @@ namespace RefTest.OSC
             }
         }
 
-        public bool Init()
+        public void Connect()
+        {
+            CanConnectWorker = true;
+            Task.Run(ConnectWorker);
+        }
+        public void StopConnect() => CanConnectWorker = false;
+
+        public async Task<bool> Init()
         {
 
             //здесь были методы
             //SearchDevices()
             //Connect()
             //GetVersion()
-            
+
+
+            //смысл этого условия в том, что если после выполнения функции Connect()
+            //сразу выполнить функцию Init(), то есть большая вероятность что функция
+            //Init() вернет false
+            if (!await Task.Run(() =>
+                {
+                    var fail_counter = 100;  //~5sec
+                    while (!IsConnect && fail_counter > 0)
+                    {
+                        fail_counter--;
+                        Task.Delay(50);
+                    }
+                    if (fail_counter == 0) return false;
+                    return true;
+                })) return false;  
             OSCImport.dsoSetUSBBus(deviceIndex);
             if (!OSCImport.dsoInitHard(deviceIndex)) return false;
             if (OSCImport.dsoHTADCCHModGain(deviceIndex, chMode) == 0) return false;
@@ -176,7 +231,7 @@ namespace RefTest.OSC
         {
 
             if (!SearchDeviceIndex(out deviceIndex)) return false;
-            if (!Connect(deviceIndex)) return false;
+            if (!ConnectDevice(deviceIndex)) return false;
             return true;
         }
 
@@ -201,7 +256,7 @@ namespace RefTest.OSC
         {
             return OSCImport.dsoGetFPGAVersion(deviceIndex);
         }
-        private bool Connect(ushort DeviceIndex)
+        private bool ConnectDevice(ushort DeviceIndex)
         {
             var con = OSCImport.dsoHTDeviceConnect(DeviceIndex);
             if (con == 1) return true;

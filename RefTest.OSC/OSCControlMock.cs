@@ -27,6 +27,9 @@ namespace RefTest.OSC
                 return _instance;
             }
         }
+
+        public bool SingleConnect { get; set; }
+
         private OSCControlMock()
         {
 
@@ -37,7 +40,7 @@ namespace RefTest.OSC
             // Эмуляция инициализации
             return true;
         }
-        private bool Connect()
+        private bool ConnectDevice()
         {
             return true;
         }
@@ -118,6 +121,21 @@ namespace RefTest.OSC
         public ushort GetVersion()
         {
             return ushort.Parse("20240529");
+        }
+
+        void IOSCControl.Connect()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void StopConnect()
+        {
+            throw new NotImplementedException();
+        }
+
+        Task<bool> IOSCControl.Init()
+        {
+            throw new NotImplementedException();
         }
     }
 }
