@@ -51,7 +51,7 @@ namespace RefTest.OSC
         */
 
 
-        public PCONTROLDATA stControl = new PCONTROLDATA
+        public PCONTROLDATA stControl = new()
         {
             nCHSet = 0x01,
             nTimeDIV = (ushort)TimeDiv.ns200,
@@ -64,8 +64,8 @@ namespace RefTest.OSC
             nAlreadyReadLen = 0,
             nALT = 0,
         };
-               RELAYCONTROL relayControl = new RELAYCONTROL
-        {
+               RELAYCONTROL relayControl = new()
+               {
             bCHEnable = [true, false, false, false],
             nCHVoltDIV = [(ushort)VoltDiv.V4, (ushort)VoltDiv.V8, 0, 0],
             nCHCoupling = [0, 0, 0, 0],
@@ -91,7 +91,7 @@ namespace RefTest.OSC
             
         }
 
-        private void ConnectWorker()
+        private async void ConnectWorker()
         {
             
                 while (CanConnectWorker)
@@ -123,7 +123,7 @@ namespace RefTest.OSC
                         }
                     }
 
-                    Task.Delay(1000);
+                   await Task.Delay(1000);
                 }
         }
 
@@ -142,7 +142,7 @@ namespace RefTest.OSC
         /// метод для непрерывного считывания данных из осциллографа
         /// </summary>
         /// <param name="token">токен отмены задачи</param>
-        private void Worker(CancellationToken token)
+        private async void Worker(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
             {
@@ -150,7 +150,7 @@ namespace RefTest.OSC
                 WorkerWaiter.WaitOne();
                 if(OSCImport.dsoHTStartCollectData(deviceIndex, (ushort)collectDataMode) == 0)
                 {
-                    Task.Delay(10);
+                    await Task.Delay(10);
                     continue;
                 }
                 while ((OSCImport.dsoHTGetState(0) & 0x02) == 0)
@@ -161,7 +161,7 @@ namespace RefTest.OSC
                         fail_counter--;
                         if (fail_counter == 0) break;
                     }
-                    Task.Delay(10);
+                   await Task.Delay(10);
                 }
                 if (fail_counter == 0)
                 {
@@ -172,7 +172,7 @@ namespace RefTest.OSC
                 {
                     OnDataReceived();
                 }
-                Task.Delay(10);
+                await Task.Delay(10);
             }
         }
 

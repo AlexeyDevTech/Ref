@@ -7,12 +7,15 @@ namespace RefTest.OSC
     public class OSCControlMock : IOSCControl
     {
         public event OSCDataReceivedEventHandler DataReceived;
+        public event OSCConnectStateChangeEventHandler ConnectStateChange;
 
         CancellationTokenSource cts;
         CancellationToken ct;
         Task WorkerTask;
         ManualResetEvent WorkerWaiter = new ManualResetEvent(true);
 
+
+        bool SimConnectState = false;
         bool IsConnect = false;
         public bool SingleConnect { get; set; } = false; //возможность управлять потоком подключения, либо после
                                                          //запуска он останавливается, 
@@ -21,6 +24,7 @@ namespace RefTest.OSC
         private static OSCControlMock _instance;
         ushort deviceIndex = 32;                //значение по умолчанию (Init() == false если ничего не нашел)
         public CollectDataMode collectDataMode = CollectDataMode.Single;
+        
 
         ushort vTriggerPos = 190;
         ushort hTriggerPos = 1;
@@ -43,10 +47,19 @@ namespace RefTest.OSC
         }
         private OSCControlMock()
         {
-
+            Task.Run(async () =>
+            {
+                while (true)
+                {
+                    await Task.Delay(2000);
+                    SimConnectState = true;
+                    await Task.Delay(3000);
+                    SimConnectState = false;
+                }
+            });
         }
 
-        private void ConnectWorker()
+        private async void ConnectWorker()
         {
 
             while (CanConnectWorker)
@@ -58,6 +71,7 @@ namespace RefTest.OSC
                         {
                             Console.WriteLine("Подключение установлено");
                             IsConnect = true;
+                            OnConnectStateChange();
                         }
                 }
                 else
@@ -69,6 +83,7 @@ namespace RefTest.OSC
                     {
                         Console.WriteLine("Подключение разорвано");
                         IsConnect = false;
+                        OnConnectStateChange();
                         if (SingleConnect)
                         {
                             StopConnect();
@@ -77,8 +92,13 @@ namespace RefTest.OSC
                     }
                 }
 
-                Task.Delay(1000);
+                await Task.Delay(1000);
             }
+        }
+
+        private void OnConnectStateChange()
+        {
+            ConnectStateChange?.Invoke(IsConnect);
         }
 
 
@@ -114,7 +134,7 @@ namespace RefTest.OSC
             return true;
         }
         public ushort GetVersion() => ushort.Parse("61445");
-        private bool ConnectDevice(ushort DeviceIndex) => true;
+        private bool ConnectDevice(ushort DeviceIndex) => SimConnectState;
         private short[] SearchDevices()
         {
             short[] devices = new short[32];

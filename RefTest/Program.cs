@@ -10,8 +10,18 @@ namespace RefTest
         {
             try
             {
-                OSCControlFactory.SetInstance(OSCControlType.Original);
-
+                OSCControlFactory.SetInstance(OSCControlType.Mock);
+                OSCControlFactory.Instance.ConnectStateChange += state =>
+                {
+                    if (state)
+                    {
+                        Console.WriteLine("+++произошло событие: устройство подключено!");
+                    }
+                    else 
+                    { 
+                        Console.WriteLine("---произошло событие: соединение разорвано!");
+                    }
+                };
                 OSCControlFactory.Instance.Connect();
                 
             }
