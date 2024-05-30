@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RefTest.OSC
+namespace RefTest.OSC.Interfaces
 {
     public delegate void OSCDataReceivedEventHandler(ushort[] data);
     public delegate void OSCConnectStateChangeEventHandler(bool connectState);

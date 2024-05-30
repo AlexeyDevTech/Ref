@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RefTest.OSC
+namespace RefTest.OSC.Structs
 {
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct PCONTROLDATA

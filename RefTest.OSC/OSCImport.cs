@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using RefTest.OSC.Structs;
 
 namespace RefTest.OSC
 {
