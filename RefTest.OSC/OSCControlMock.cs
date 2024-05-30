@@ -1,4 +1,6 @@
 ﻿using RefTest.OSC.Interfaces;
+using RefTest.OSC.Structs;
+using System.Runtime.InteropServices;
 
 namespace RefTest.OSC
 {
@@ -11,126 +13,157 @@ namespace RefTest.OSC
         Task WorkerTask;
         ManualResetEvent WorkerWaiter = new ManualResetEvent(true);
 
-        private ushort[] ch1 = new ushort[65536];
+        bool IsConnect = false;
+        public bool SingleConnect { get; set; } = false; //возможность управлять потоком подключения, либо после
+                                                         //запуска он останавливается, 
+                                                         //либо после запуска и последующего отключения он будет 
+                                                         //продолжать искать прибор
         private static OSCControlMock _instance;
+        ushort deviceIndex = 32;                //значение по умолчанию (Init() == false если ничего не нашел)
+        public CollectDataMode collectDataMode = CollectDataMode.Single;
+
+        ushort vTriggerPos = 190;
+        ushort hTriggerPos = 1;
+
+        ushort[] ch1 = new ushort[65536];
+
+
+        private bool CanConnectWorker = false;
 
         public static OSCControlMock Instance
         {
             get
             {
-                if (_instance == null) _instance =  new OSCControlMock();
+                if (_instance == null)
+                {
+                    _instance = new OSCControlMock();
+                }
                 return _instance;
             }
         }
-
-        public bool SingleConnect { get; set; }
-
         private OSCControlMock()
         {
 
         }
 
-        public bool Init()
+        private void ConnectWorker()
         {
-            // Эмуляция инициализации
+
+            while (CanConnectWorker)
+            {
+                if (!IsConnect) //Если не подключено
+                {
+                    if (SearchDeviceIndex(out deviceIndex)) //поиск устройства 
+                        if (ConnectDevice(deviceIndex))
+                        {
+                            Console.WriteLine("Подключение установлено");
+                            IsConnect = true;
+                        }
+                }
+                else
+                {
+                    //некая полезная нагрузка 
+
+                    var is_con = ConnectDevice(deviceIndex);
+                    if (!is_con)
+                    {
+                        Console.WriteLine("Подключение разорвано");
+                        IsConnect = false;
+                        if (SingleConnect)
+                        {
+                            StopConnect();
+                            break;
+                        }
+                    }
+                }
+
+                Task.Delay(1000);
+            }
+        }
+
+
+        /// <summary>
+        /// метод для непрерывного считывания данных из осциллографа
+        /// </summary>
+        /// <param name="token">токен отмены задачи</param>
+        private void Worker(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                OnDataReceived();
+                Thread.Sleep(1000);
+            }
+        }
+
+        public void Connect()
+        {
+            CanConnectWorker = true;
+            Task.Run(ConnectWorker);
+        }
+        public void StopConnect() => CanConnectWorker = false;
+
+        public async Task<bool> Init()
+        {
             return true;
         }
-        private bool ConnectDevice()
+        public bool SearchAndConnectCheck() => true;
+
+        public bool SearchDeviceIndex(out ushort DeviceIndex)
         {
+            DeviceIndex = 0;
             return true;
         }
+        public ushort GetVersion() => ushort.Parse("61445");
+        private bool ConnectDevice(ushort DeviceIndex) => true;
         private short[] SearchDevices()
         {
             short[] devices = new short[32];
             devices[0] = 1;
             return devices;
         }
+        private bool ReadCalibrationData() => true;
+        private bool TryRecalib() => true;
 
-        public float GetSampleRate()
+        public bool SetSampleRate(YTFormat format) => true;
+        public bool SetSampleRate(TimeDiv td, YTFormat format) => true;
+        public float GetSampleRate() => 1000.0f;
+        public TimeDiv GetTimeDiv() => TimeDiv.ns200;
+        public VoltDiv GetVoltDiv() => VoltDiv.V8;
+        public bool SetVoltDiv(VoltDiv vd) => true;
+        public ushort GetVTriggerLevel() => vTriggerPos;
+        public ushort GetHTriggerLevel() => hTriggerPos;
+        public bool SetVTriggerLevel(byte level)
         {
-            // Возвращаем фиктивное значение
-            return 1000.0f;
-        }
-      
-        public bool SetVoltDiv(VoltDiv vd)
-        {
-            // Эмуляция установки делителя напряжения
+            var tl = ushort.Parse(level.ToString());
+            vTriggerPos = tl;
             return true;
         }
-
-        public ushort GetVTriggerLevel()
+        public bool SetHTriggerLevel(byte level)
         {
-            // Возвращаем фиктивное значение
-            return 190;
+            var tl = ushort.Parse(level.ToString());
+            hTriggerPos = tl;
+            return true;
         }
-        public ushort GetHTriggerLevel() => 1;
-
-        public bool SetVTriggerLevel(byte level) => true;
-        public bool SetHTriggerLevel(byte level) => true;
-        public bool SetTriggerLevel(byte hLevel, byte vLevel) => true;
-
-
-        public ushort[] GetData()
+        public bool SetTriggerLevel(byte hLevel, byte vLevel) => SetVTriggerLevel(vLevel) && SetHTriggerLevel(hLevel);
+        public ushort[] GetData() => ch1;
+        void OnDataReceived()
         {
-            // Возвращаем фиктивные данные
-            return ch1;
+            DataReceived?.Invoke(GetData());
         }
 
-      
-
+        //Task management
         public void Start()
         {
-            // Эмуляция запуска
             cts = new CancellationTokenSource();
             ct = cts.Token;
-            WorkerTask = new Task(() => SimulateDataCollection(ct), ct, TaskCreationOptions.LongRunning);
+            WorkerTask = new Task(() => Worker(ct), ct, TaskCreationOptions.LongRunning);
             WorkerTask.Start();
         }
         public void Pause() => WorkerWaiter.Reset();
         public void Play() => WorkerWaiter.Set();
-        public void Stop() => cts.Cancel();
-        private void SimulateDataCollection(CancellationToken token)
+        public void Stop()
         {
-            // Эмуляция процесса сбора данных
-            while (!token.IsCancellationRequested)
-            {
-                Thread.Sleep(100);
-                OnDataReceived();
-            }
-        }
-
-        private void OnDataReceived()
-        {
-            // Вызов события DataReceived с фиктивными данными
-            DataReceived?.Invoke(GetData());
-        }
-
-        public TimeDiv GetTimeDiv() => TimeDiv.ns200;
-
-        public VoltDiv GetVoltDiv() => VoltDiv.V8;
-
-        public bool SetSampleRate(YTFormat format) => true;
-
-        public bool SetSampleRate(TimeDiv timeDiv, YTFormat format) => true;
-
-        public ushort GetVersion()
-        {
-            return ushort.Parse("20240529");
-        }
-
-        void IOSCControl.Connect()
-        {
-            throw new NotImplementedException();
-        }
-
-        public void StopConnect()
-        {
-            throw new NotImplementedException();
-        }
-
-        Task<bool> IOSCControl.Init()
-        {
-            throw new NotImplementedException();
+            cts.Cancel();
         }
     }
 }

@@ -11,6 +11,7 @@ namespace RefTest.OSC.Interfaces
     public interface IOSCControl
     {
         event OSCDataReceivedEventHandler DataReceived;
+        event OSCConnectStateChangeEventHandler ConnectStateChange;
 
         bool SingleConnect { get; set; }
 
