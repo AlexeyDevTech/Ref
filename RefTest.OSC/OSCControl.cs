@@ -103,6 +103,7 @@ namespace RefTest.OSC
                             {
                                 Console.WriteLine("Подключение установлено");
                                 IsConnect = true;
+                                OnConnectStateChange();
                             }
                                 
                     }
@@ -115,6 +116,7 @@ namespace RefTest.OSC
                         {                        
                             Console.WriteLine("Подключение разорвано");
                             IsConnect = false;
+                            OnConnectStateChange();
                             if (SingleConnect)
                             {
                                 StopConnect();
@@ -125,6 +127,11 @@ namespace RefTest.OSC
 
                    await Task.Delay(1000);
                 }
+        }
+
+        private void OnConnectStateChange()
+        {
+            ConnectStateChange?.Invoke(IsConnect);
         }
 
         private void FailConnectRegister()
@@ -148,27 +155,33 @@ namespace RefTest.OSC
             {
                 int fail_counter = 50;
                 WorkerWaiter.WaitOne();
-                if(OSCImport.dsoHTStartCollectData(deviceIndex, (ushort)collectDataMode) == 0)
+                await Console.Out.WriteAsync("prc1");
+                if (OSCImport.dsoHTStartCollectData(deviceIndex, (ushort)collectDataMode) == 0)
                 {
+                    await Console.Out.WriteAsync("-");
                     await Task.Delay(10);
                     continue;
                 }
+                await Console.Out.WriteAsync("f+");
+                await Console.Out.WriteAsync("2");
                 while ((OSCImport.dsoHTGetState(0) & 0x02) == 0)
                 {
+                    await Console.Out.WriteAsync(".");
                     if (token.IsCancellationRequested) break;
                     if (collectDataMode == CollectDataMode.Single)
                     {
                         fail_counter--;
                         if (fail_counter == 0) break;
                     }
-                   await Task.Delay(10);
+                    await Task.Delay(10); //40
                 }
                 if (fail_counter == 0)
                 {
                     errorCollectingDataCounter++;
                     continue;
                 }
-                if(OSCImport.dsoHTGetData(deviceIndex, ch1, ch2, ch3, ch4, ref stControl) != 0)
+                await Console.Out.WriteAsync("3");
+                if (OSCImport.dsoHTGetData(deviceIndex, ch1, ch2, ch3, ch4, ref stControl) != 0)
                 {
                     OnDataReceived();
                 }
@@ -185,13 +198,6 @@ namespace RefTest.OSC
 
         public async Task<bool> Init()
         {
-
-            //здесь были методы
-            //SearchDevices()
-            //Connect()
-            //GetVersion()
-
-
             //смысл этого условия в том, что если после выполнения функции Connect()
             //сразу выполнить функцию Init(), то есть большая вероятность что функция
             //Init() вернет false
@@ -206,18 +212,32 @@ namespace RefTest.OSC
                     if (fail_counter == 0) return false;
                     return true;
                 })) return false;  
+            
             OSCImport.dsoSetUSBBus(deviceIndex);
+            await Console.Out.WriteLineAsync("InitHard");
             if (!OSCImport.dsoInitHard(deviceIndex)) return false;
+            await Console.Out.WriteLineAsync("dsoHTADCCHModGain");
             if (OSCImport.dsoHTADCCHModGain(deviceIndex, chMode) == 0) return false;
+            await Console.Out.WriteLineAsync("ReadCalibrationData");
             if (!ReadCalibrationData()) return false;
+            await Console.Out.WriteLineAsync("TryRecalib");
             if (!TryRecalib()) return false;         //вернет false только если в процессе перекалибровки была ошибка
+            await Console.Out.WriteLineAsync("dsoHTSetSampleRate");
             if (OSCImport.dsoHTSetSampleRate(deviceIndex, (ushort)YTFormat.Normal, ref relayControl, ref stControl) == 0) return false;
+            await Console.Out.WriteLineAsync("dsoHTSetCHAndTrigger");
             if (OSCImport.dsoHTSetCHAndTrigger(deviceIndex, ref relayControl, stControl.nTimeDIV) == 0) return false;
+            await Console.Out.WriteLineAsync("dsoHTSetRamAndTrigerControl");
             if (OSCImport.dsoHTSetRamAndTrigerControl(deviceIndex, stControl.nTimeDIV, stControl.nCHSet, stControl.nTriggerSource, 1) == 0) return false;
+            await Console.Out.WriteLineAsync("dsoHTSetCHPos");
             if (OSCImport.dsoHTSetCHPos(deviceIndex, relayControl.nCHVoltDIV[0], 128, 0, 1) == 0) return false;
+            await Console.Out.WriteLineAsync("dsoHTSetCHPos2");
             if (OSCImport.dsoHTSetCHPos(deviceIndex, relayControl.nCHVoltDIV[1], 128, 0, 1) == 0) return false;
+            await Console.Out.WriteLineAsync("dsoHTSetVTriggerLevel");
             if (OSCImport.dsoHTSetVTriggerLevel(deviceIndex, stControl.nVTriggerPos, TriggerSens) == 0) return false;
+            await Console.Out.WriteLineAsync("dsoHTSetTrigerMode");
             if (OSCImport.dsoHTSetTrigerMode(deviceIndex, 0, stControl.nTriggerSlope, 0) == 0) return false;
+            
+
             return true;
         }
 

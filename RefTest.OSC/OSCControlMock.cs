@@ -47,7 +47,7 @@ namespace RefTest.OSC
         }
         private OSCControlMock()
         {
-            Task.Run(async () =>
+            Task.Run(async() =>
             {
                 while (true)
                 {
@@ -92,7 +92,7 @@ namespace RefTest.OSC
                     }
                 }
 
-                await Task.Delay(1000);
+               await Task.Delay(1000);
             }
         }
 
