@@ -10,23 +10,21 @@ namespace RefTest
         {
             try
             {
-                OSCControlFactory.SetInstance(OSCControlType.Original);
+                OSCControlFactory.SetInstance(OSCControlType.Mock);
                 OSCControlFactory.Instance.ConnectStateChange += async state => 
                 {
                     if (state)
-                    {
-                        Console.WriteLine("+++произошло событие: устройство подключено!");
-                        var r = await OSCControlFactory.Instance.Init();
+                    {  
+                        var r = await OSCControlFactory.Instance.Init();  //это запускает OSC
                         if (r)
                         {
-                            OSCControlFactory.Instance.Start();
+                            OSCControlFactory.Instance.Stop();
+
+                            OSCControlFactory.Instance.Start();  //это запускает считывание данных
                         }
                     }
                     else 
-                    { 
-                        Console.WriteLine("---произошло событие: соединение разорвано!");
                         OSCControlFactory.Instance.Stop();
-                    }
                 };
                 OSCControlFactory.Instance.DataReceived += data =>
                 {

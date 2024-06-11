@@ -6,6 +6,7 @@ namespace RefTest.OSC
     {
         Original,
         Mock,
+
         // Add other implementations if needed
     }
 

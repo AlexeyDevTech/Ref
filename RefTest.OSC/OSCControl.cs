@@ -155,18 +155,18 @@ namespace RefTest.OSC
             {
                 int fail_counter = 50;
                 WorkerWaiter.WaitOne();
-                await Console.Out.WriteAsync("prc1");
+                //await Console.Out.WriteAsync("prc1");
                 if (OSCImport.dsoHTStartCollectData(deviceIndex, (ushort)collectDataMode) == 0)
                 {
-                    await Console.Out.WriteAsync("-");
+               //     await Console.Out.WriteAsync("-");
                     await Task.Delay(10);
                     continue;
                 }
-                await Console.Out.WriteAsync("f+");
-                await Console.Out.WriteAsync("2");
+                //await Console.Out.WriteAsync("f+");
+                //await Console.Out.WriteAsync("2");
                 while ((OSCImport.dsoHTGetState(0) & 0x02) == 0)
                 {
-                    await Console.Out.WriteAsync(".");
+                  //  await Console.Out.WriteAsync(".");
                     if (token.IsCancellationRequested) break;
                     if (collectDataMode == CollectDataMode.Single)
                     {
@@ -180,7 +180,7 @@ namespace RefTest.OSC
                     errorCollectingDataCounter++;
                     continue;
                 }
-                await Console.Out.WriteAsync("3");
+                //await Console.Out.WriteAsync("3");
                 if (OSCImport.dsoHTGetData(deviceIndex, ch1, ch2, ch3, ch4, ref stControl) != 0)
                 {
                     OnDataReceived();
