@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using RefTest.OSC.Interfaces;
 using RefTest.OSC.Structs;
 
@@ -8,22 +9,30 @@ namespace RefTest.OSC
     {
         public event OSCDataReceivedEventHandler DataReceived;
         public event OSCConnectStateChangeEventHandler ConnectStateChange;
+        CancellationTokenSource comCts;
         CancellationTokenSource cts;
         CancellationToken ct;
         Task WorkerTask;
         ManualResetEvent WorkerWaiter = new ManualResetEvent(true);
+        ManualResetEvent CommandWaiter = new ManualResetEvent(true);
+        ManualResetEvent ConnectWaiter = new ManualResetEvent(true);
+        ConcurrentQueue<Func<Task>> WorkerQueue = new ConcurrentQueue<Func<Task>>();
+
 
 
 
         bool IsConnect = false;
+        bool IsBusy = false;
         public bool SingleConnect { get; set; } = false; //возможность управлять потоком подключения, либо после
                                                          //запуска он останавливается, 
                                                          //либо после запуска и последующего отключения он будет 
                                                          //продолжать искать прибор
 
+        public bool AutoInit { get; set; } = true;      //возможность авто-инициализации
 
         private static OSCControl _instance;
         int failConnectCounter = 3;
+        int faultCounter = 0;                   //регистрирует количество неудачных попыток подключения
         ushort deviceIndex = 32;                //значение по умолчанию (Init() == false если ничего не нашел)
         ushort ver = 0;
         ushort chMode = 1;
@@ -51,7 +60,7 @@ namespace RefTest.OSC
         */
 
 
-        public PCONTROLDATA stControl = new()
+        public PCONTROLDATA stControl = new PCONTROLDATA()
         {
             nCHSet = 0x01,
             nTimeDIV = (ushort)TimeDiv.ns200,
@@ -64,80 +73,133 @@ namespace RefTest.OSC
             nAlreadyReadLen = 0,
             nALT = 0,
         };
-               RELAYCONTROL relayControl = new()
-               {
-            bCHEnable = [true, false, false, false],
-            nCHVoltDIV = [(ushort)VoltDiv.V4, (ushort)VoltDiv.V8, 0, 0],
-            nCHCoupling = [0, 0, 0, 0],
-            bCHBWLimit = [false, false, false, false],
+        RELAYCONTROL relayControl = new RELAYCONTROL()
+        {
+            bCHEnable = new bool[4] { true, false, false, false },
+            nCHVoltDIV = new ushort[4] { (ushort)VoltDiv.V4, (ushort)VoltDiv.V8, 0, 0 },
+            nCHCoupling = new ushort[4] { 0, 0, 0, 0 },
+            bCHBWLimit = new bool[4] { false, false, false, false },
             bTrigFilt = false,
             nTrigSource = 0,
             nALT = 0
         };
         private bool CanConnectWorker = false;
+        private object _locker = new object();
 
-        public static OSCControl Instance {
+        public static OSCControl Instance
+        {
             get
             {
-                if(_instance == null)
+                if (_instance == null)
                 {
                     _instance = new OSCControl();
                 }
                 return _instance;
             }
         }
+
+        public OSCStates State { get; private set; }
+
         private OSCControl()
         {
-            
+            comCts = new CancellationTokenSource();
+            Task.Factory.StartNew(CommandWorker, comCts.Token, TaskCreationOptions.LongRunning, TaskScheduler.Current);
+        }
+
+        private async Task CommandWorker()
+        {
+            while (true)
+            {
+                try
+                {
+                    if (State >= OSCStates.Inited)
+                    {
+                        if (!IsBusy)
+                        {
+                            if (WorkerQueue.TryDequeue(out var operation))
+                            {
+                                CommandWaiter.Reset();
+                                await operation();
+                                await Task.Delay(10);
+                                CommandWaiter.Set();
+                            }
+                            else await Task.Delay(100);
+                        }
+                        else await Task.Delay(10);
+                    }
+                    else
+                    {
+                        await Task.Delay(100);
+                    }
+                }
+                catch (Exception ex)
+                {
+
+                }
+                await Task.Delay(50);
+            }
         }
 
         private async void ConnectWorker()
         {
-            
-                while (CanConnectWorker)
+            while (CanConnectWorker)
+            {
+                ConnectWaiter.WaitOne();
+                if (!IsConnect) //Если не подключено
                 {
-                    if (!IsConnect) //Если не подключено
+                    if (SearchDeviceIndex(out deviceIndex)) //поиск устройства 
+                        if (ConnectDevice(deviceIndex))
+                        {
+                            Console.WriteLine("Подключение установлено");
+                            IsConnect = true;
+                            faultCounter = 0;
+                            OnConnectStateChange();
+                            if (AutoInit)
+                                await Init();
+                        }
+                        else //если не подключился
+                        {
+                            faultCounter++;
+                            OnConnectStateChange();
+                        }
+                    else    //если не нашел
                     {
-                        if (SearchDeviceIndex(out deviceIndex)) //поиск устройства 
-                            if (ConnectDevice(deviceIndex))
-                            {
-                                Console.WriteLine("Подключение установлено");
-                                IsConnect = true;
-                                OnConnectStateChange();
-                            }
-                                
+                        faultCounter++;
+                        OnConnectStateChange();
                     }
-                    else
-                    {
+                }
+                else
+                {
                     //некая полезная нагрузка 
 
-                        var is_con = ConnectDevice(deviceIndex);
-                        if (!is_con)            
-                        {                        
-                            Console.WriteLine("Подключение разорвано");
-                            IsConnect = false;
-                            OnConnectStateChange();
-                            if (SingleConnect)
-                            {
-                                StopConnect();
-                                break;  
-                            }
+                    var is_con = ConnectDevice(deviceIndex);
+                    if (!is_con)
+                    {
+                        Console.WriteLine("Подключение разорвано");
+                        IsConnect = false;
+                        OnConnectStateChange();
+                        State = OSCStates.Idle;
+                        if (SingleConnect)
+                        {
+                            StopConnect();
+                            break;
                         }
                     }
-
-                   await Task.Delay(1000);
                 }
+
+                await Task.Delay(1000);
+            }
         }
 
         private void OnConnectStateChange()
         {
-            ConnectStateChange?.Invoke(IsConnect);
+            ConnectStateChange?.Invoke(IsConnect, faultCounter);
         }
 
         private void FailConnectRegister()
         {
             failConnectCounter--;
-            if(failConnectCounter < 0)
+            if (failConnectCounter < 0)
             {
                 deviceIndex = 32;
                 failConnectCounter = 3;
@@ -151,42 +213,59 @@ namespace RefTest.OSC
         /// <param name="token">токен отмены задачи</param>
         private async void Worker(CancellationToken token)
         {
+
             while (!token.IsCancellationRequested)
             {
-                int fail_counter = 50;
-                WorkerWaiter.WaitOne();
-                //await Console.Out.WriteAsync("prc1");
-                if (OSCImport.dsoHTStartCollectData(deviceIndex, (ushort)collectDataMode) == 0)
+                try
                 {
-               //     await Console.Out.WriteAsync("-");
-                    await Task.Delay(10);
-                    continue;
-                }
-                //await Console.Out.WriteAsync("f+");
-                //await Console.Out.WriteAsync("2");
-                while ((OSCImport.dsoHTGetState(0) & 0x02) == 0)
-                {
-                  //  await Console.Out.WriteAsync(".");
-                    if (token.IsCancellationRequested) break;
-                    if (collectDataMode == CollectDataMode.Single)
+                    IsBusy = true;
+                    int fail_counter = 50;
+                    //await Console.Out.WriteAsync("prc00|");
+                    WorkerWaiter.WaitOne();
+                    //await Console.Out.WriteAsync("prc01|");
+                    CommandWaiter.WaitOne();
+
+                    //await Console.Out.WriteAsync("prc1");
+                    if (OSCImport.dsoHTStartCollectData(deviceIndex, (ushort)collectDataMode) == 0)
                     {
-                        fail_counter--;
-                        if (fail_counter == 0) break;
+                        //await Console.Out.WriteAsync("-");
+                        await Task.Delay(10);
+                        continue;
                     }
-                    await Task.Delay(10); //40
+                    int err = Marshal.GetLastWin32Error();
+                    //await Console.Out.WriteAsync($"f+: {err}|");
+                    //await Console.Out.WriteAsync("2");
+                    while ((OSCImport.dsoHTGetState(0) & 0x02) == 0)
+                    {
+                        //  await Console.Out.WriteAsync(".");
+                        if (token.IsCancellationRequested) break;
+                        if (collectDataMode == CollectDataMode.Single)
+                        {
+                            fail_counter--;
+                            if (fail_counter == 0) break;
+                        }
+                        await Task.Delay(10); //40
+                    }
+                    if (fail_counter == 0)
+                    {
+                        errorCollectingDataCounter++;
+                        continue;
+                    }
+                    //await Console.Out.WriteLineAsync("3");
+                    if (OSCImport.dsoHTGetData(deviceIndex, ch1, ch2, ch3, ch4, ref stControl) != 0)
+                    {
+                        //await Console.Out.WriteAsync("data");
+                        OnDataReceived();
+                    }
+                    IsBusy = false;
+                    await Task.Delay(40);
                 }
-                if (fail_counter == 0)
+                catch (Exception)
                 {
-                    errorCollectingDataCounter++;
-                    continue;
+                    await Console.Out.WriteLineAsync("ERROR on CollectData!!!");
                 }
-                //await Console.Out.WriteAsync("3");
-                if (OSCImport.dsoHTGetData(deviceIndex, ch1, ch2, ch3, ch4, ref stControl) != 0)
-                {
-                    OnDataReceived();
-                }
-                await Task.Delay(10);
             }
+
         }
 
         public void Connect()
@@ -195,24 +274,28 @@ namespace RefTest.OSC
             Task.Run(ConnectWorker);
         }
         public void StopConnect() => CanConnectWorker = false;
+        public void PauseConnect() => ConnectWaiter.Reset();
+        public void ResumeConnect() => ConnectWaiter.Set();
 
         public async Task<bool> Init()
         {
+            if (State > OSCStates.Inited) return false;
+
             //смысл этого условия в том, что если после выполнения функции Connect()
             //сразу выполнить функцию Init(), то есть большая вероятность что функция
             //Init() вернет false
             if (!await Task.Run(() =>
+            {
+                var fail_counter = 100;  //~5sec
+                while (!IsConnect && fail_counter > 0)
                 {
-                    var fail_counter = 100;  //~5sec
-                    while (!IsConnect && fail_counter > 0)
-                    {
-                        fail_counter--;
-                        Task.Delay(50);
-                    }
-                    if (fail_counter == 0) return false;
-                    return true;
-                })) return false;  
-            
+                    fail_counter--;
+                    Task.Delay(50);
+                }
+                if (fail_counter == 0) return false;
+                return true;
+            })) return false;
+
             OSCImport.dsoSetUSBBus(deviceIndex);
             await Console.Out.WriteLineAsync("InitHard");
             if (!OSCImport.dsoInitHard(deviceIndex)) return false;
@@ -236,8 +319,8 @@ namespace RefTest.OSC
             if (OSCImport.dsoHTSetVTriggerLevel(deviceIndex, stControl.nVTriggerPos, TriggerSens) == 0) return false;
             await Console.Out.WriteLineAsync("dsoHTSetTrigerMode");
             if (OSCImport.dsoHTSetTrigerMode(deviceIndex, 0, stControl.nTriggerSlope, 0) == 0) return false;
-            
 
+            State = OSCStates.Inited;
             return true;
         }
 
@@ -337,18 +420,81 @@ namespace RefTest.OSC
             return res;
         }
 
-        public bool SetSampleRate(YTFormat format)
+        internal void AddOperation(Func<Task> operation)
         {
-            if (OSCImport.dsoHTSetSampleRate(deviceIndex, (ushort)format, ref relayControl, ref stControl) != 0) return false;
-            if (OSCImport.dsoHTSetCHAndTrigger(0, ref relayControl, stControl.nTimeDIV) != 0) return false;
-            return true;
+            WorkerQueue.Enqueue(operation);
         }
-        public bool SetSampleRate(TimeDiv td, YTFormat format)
+
+        internal void AddOperation(Action operation)
+        {
+            AddOperation(() =>
+            {
+                operation();
+                return Task.CompletedTask;
+            });
+        }
+        private Task<T> QueueOperationAsync<T>(Func<T> operation)
+        {
+            var tcs = new TaskCompletionSource<T>();
+
+            AddOperation(() =>
+            {
+                try
+                {
+                    T result = operation();
+                    tcs.SetResult(result);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+                return Task.CompletedTask;
+            });
+
+            return tcs.Task;
+        }
+        //private T QueueOperation<T>(Func<T> operation)
+        //{
+        //    var tcs = new TaskCompletionSource<T>();
+
+        //    AddOperation(() =>
+        //    {
+        //        try
+        //        {
+        //            T result = operation();
+        //            tcs.SetResult(result);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            tcs.SetException(ex);
+        //        }
+        //        return Task.CompletedTask;
+        //    });
+
+        //    return tcs.Task.Result;
+        //}
+
+
+        public async Task<bool> SetSampleRate(YTFormat format)
+        {
+
+            return await QueueOperationAsync(() =>
+            {
+                var res = true;
+                if (OSCImport.dsoHTSetSampleRate(deviceIndex, (ushort)format, ref relayControl, ref stControl) != 0) res = false;
+                if (OSCImport.dsoHTSetCHAndTrigger(0, ref relayControl, stControl.nTimeDIV) != 0) res = false;
+                return res;
+            });
+        }
+        public async Task<bool> SetSampleRate(TimeDiv td, YTFormat format)
         {
             var utd = (ushort)td;
             if (stControl.nTimeDIV != utd) stControl.nTimeDIV = utd;
-            return SetSampleRate(format);
+            return await SetSampleRate(format);
         }
+
+        public async Task<bool> SetSampleRate(TimeDiv timeDiv) => await SetSampleRate(timeDiv, YTFormat.Normal);
+
         public float GetSampleRate()
         {
             return OSCImport.dsoGetSampleRate(deviceIndex);
@@ -356,39 +502,52 @@ namespace RefTest.OSC
         public TimeDiv GetTimeDiv()
         {
             var td = stControl.nTimeDIV;
-            var res = Enum.Parse<TimeDiv>(td.ToString());
-            return res;
+            var res = Enum.Parse(typeof(TimeDiv), td.ToString());
+            return (TimeDiv)res;
         }
         public VoltDiv GetVoltDiv()
         {
             var vd = relayControl.nCHVoltDIV[0];
-            var res = Enum.Parse<VoltDiv>(vd.ToString());
-            return res;
+            var res = Enum.Parse(typeof(VoltDiv), vd.ToString());
+            return (VoltDiv)res;
         }
-        public bool SetVoltDiv(VoltDiv vd)
+        public async Task<bool> SetVoltDiv(VoltDiv vd)
         {
-            relayControl.nCHVoltDIV[0] = (ushort)vd;
-            if(OSCImport.dsoHTSetCHAndTrigger(deviceIndex, ref relayControl, (ushort)GetTimeDiv()) == 0) return false;
-            return true;
+            return await QueueOperationAsync(() =>
+            {
+                var res = true;
+                relayControl.nCHVoltDIV[0] = (ushort)vd;
+                if (OSCImport.dsoHTSetCHAndTrigger(deviceIndex, ref relayControl, (ushort)GetTimeDiv()) == 0) res = false;
+                return res;
+            });
+
         }
         public ushort GetVTriggerLevel() => stControl.nVTriggerPos;
         public ushort GetHTriggerLevel() => stControl.nHTriggerPos;
-        public bool SetVTriggerLevel(byte level)
+        public async Task<bool> SetVTriggerLevel(byte level)
         {
-            var tl = ushort.Parse(level.ToString());
-            stControl.nVTriggerPos = tl;
-            if (OSCImport.dsoHTSetVTriggerLevel(deviceIndex, tl, TriggerSens) == 0) return false;
-            return true;
+            return await QueueOperationAsync(() =>
+            {
+                var res = true;
+                var tl = ushort.Parse(level.ToString());
+                stControl.nVTriggerPos = tl;
+                if (OSCImport.dsoHTSetVTriggerLevel(deviceIndex, tl, TriggerSens) == 0) res = false;
+                return res;
+            });
+
         }
-        public bool SetHTriggerLevel(byte level)
+        public async Task<bool> SetHTriggerLevel(byte level)
         {
-            if (level > 100) return false;
-            var tl = ushort.Parse(level.ToString());
-            stControl.nHTriggerPos = tl;
-            if (OSCImport.dsoHTSetHTriggerLength(deviceIndex, ref stControl, chMode) == 0) return false;
-            return true;
+            return await QueueOperationAsync(() =>
+            {
+                if (level > 100) return false;
+                var tl = ushort.Parse(level.ToString());
+                stControl.nHTriggerPos = tl;
+                if (OSCImport.dsoHTSetHTriggerLength(deviceIndex, ref stControl, chMode) == 0) return false;
+                return true;
+            });
         }
-        public bool SetTriggerLevel(byte hLevel, byte vLevel) => SetVTriggerLevel(vLevel) && SetHTriggerLevel(hLevel);
+        public async Task<bool> SetTriggerLevel(byte hLevel, byte vLevel) => await SetVTriggerLevel(vLevel) && await SetHTriggerLevel(hLevel);
 
         public ushort[] GetData() => ch1;
 
@@ -398,18 +557,34 @@ namespace RefTest.OSC
         }
 
         //Task management
-        public void Start() {
+        public void Start()
+        {
+            if (State == OSCStates.Started || State < OSCStates.Inited) return;
             cts = new CancellationTokenSource();
             ct = cts.Token;
             WorkerTask = new Task(() => Worker(ct), ct, TaskCreationOptions.LongRunning);
             WorkerTask.Start();
+            State = OSCStates.Started;
         }
-        public void Pause() => WorkerWaiter.Reset();
-        public void Play() => WorkerWaiter.Set();
-        public void Stop() 
+        public void Pause()
         {
-            cts.Cancel();
+            if (State == OSCStates.Paused || State < OSCStates.Inited) return;
+            WorkerWaiter.Reset();
+            State = OSCStates.Paused;
         }
+        public void Play()
+        {
+            if (State == OSCStates.Started || State < OSCStates.Inited) return;
+            WorkerWaiter.Set();
+            State = OSCStates.Started;
+        }
+        public void Stop()
+        {
+            if (State == OSCStates.Stopped || State < OSCStates.Inited) return;
+            cts.Cancel();
+            State = OSCStates.Stopped;
+        }
+
 
     }
 
@@ -421,25 +596,25 @@ namespace RefTest.OSC
     }
     public enum TimeDiv : ushort
     {
-       ns200 = 6,   //1    GHz
-       ns500 = 7,   //500  MHz
-       us1   = 8,   //250  MHz
-       us2   = 9,   //125  MHz
-       us5   = 10,  //50   MHz
-       us10  = 11,  //25   MHz
-       us20  = 12,  //12.5 MHz
-       us50  = 13,  //5    MHz
-       us100 = 14,  //2.5  MHz
-       us200 = 15,  //1.25 MHz
-       us500 = 16,  //500  kHz
-       ms1   = 17,  //250  kHz
-       ms2   = 18,  //125  kHz
-       ms5   = 19,  //50   kHz
-       ms10  = 20,  //25   kHz
-       ms20  = 21,  //12.5 kHz
-       ms50  = 22,  //5    kHz
-       ms100 = 23,  //2.5  kHz
-       ms200 = 24,  //1.25 kHz
+        ns200 = 6,   //1    GHz
+        ns500 = 7,   //500  MHz
+        us1 = 8,   //250  MHz
+        us2 = 9,   //125  MHz
+        us5 = 10,  //50   MHz
+        us10 = 11,  //25   MHz
+        us20 = 12,  //12.5 MHz
+        us50 = 13,  //5    MHz
+        us100 = 14,  //2.5  MHz
+        us200 = 15,  //1.25 MHz
+        us500 = 16,  //500  kHz
+        ms1 = 17,  //250  kHz
+        ms2 = 18,  //125  kHz
+        ms5 = 19,  //50   kHz
+        ms10 = 20,  //25   kHz
+        ms20 = 21,  //12.5 kHz
+        ms50 = 22,  //5    kHz
+        ms100 = 23,  //2.5  kHz
+        ms200 = 24,  //1.25 kHz
 
     }
     public enum VoltDiv : ushort
@@ -457,13 +632,24 @@ namespace RefTest.OSC
         V40 = 10,
         V80 = 11
     }
-    
+
     public enum CollectDataMode : ushort
     {
         Auto = 1,
         ROLL = 3,
         Wait = 4,
         Single = 5
+    }
+
+    public enum OSCStates : int
+    {
+        Idle = default,
+        Inited = 1,
+        Started = 2,
+        Paused = 3,
+        Stopped = 4,
+        Fault = 5
+
     }
 
 }

@@ -21,10 +21,11 @@ namespace RefTest.OSC
                                                          //запуска он останавливается, 
                                                          //либо после запуска и последующего отключения он будет 
                                                          //продолжать искать прибор
+        public bool AutoInit { get; set; } = false;
         private static OSCControlMock _instance;
         ushort deviceIndex = 32;                //значение по умолчанию (Init() == false если ничего не нашел)
         public CollectDataMode collectDataMode = CollectDataMode.Single;
-        
+
 
         ushort vTriggerPos = 190;
         ushort hTriggerPos = 1;
@@ -45,9 +46,12 @@ namespace RefTest.OSC
                 return _instance;
             }
         }
+
+        public OSCStates State { get; private set; }
+
         private OSCControlMock()
         {
-            Task.Run(async() =>
+            Task.Run(async () =>
             {
                 while (true)
                 {
@@ -69,7 +73,7 @@ namespace RefTest.OSC
                     if (SearchDeviceIndex(out deviceIndex)) //поиск устройства 
                         if (ConnectDevice(deviceIndex))
                         {
-                            Console.WriteLine("Подключение установлено");
+                            //Console.WriteLine("Подключение установлено");
                             IsConnect = true;
                             OnConnectStateChange();
                         }
@@ -81,7 +85,7 @@ namespace RefTest.OSC
                     var is_con = ConnectDevice(deviceIndex);
                     if (!is_con)
                     {
-                        Console.WriteLine("Подключение разорвано");
+                        //Console.WriteLine("Подключение разорвано");
                         IsConnect = false;
                         OnConnectStateChange();
                         if (SingleConnect)
@@ -92,13 +96,13 @@ namespace RefTest.OSC
                     }
                 }
 
-               await Task.Delay(1000);
+                await Task.Delay(1000);
             }
         }
 
         private void OnConnectStateChange()
         {
-            ConnectStateChange?.Invoke(IsConnect);
+            ConnectStateChange?.Invoke(IsConnect, 0);
         }
 
 
@@ -121,7 +125,14 @@ namespace RefTest.OSC
             Task.Run(ConnectWorker);
         }
         public void StopConnect() => CanConnectWorker = false;
-
+        public void PauseConnect()
+        {
+            return;
+        }
+        public void ResumeConnect()
+        {
+            return;
+        }
         public async Task<bool> Init()
         {
             return true;
@@ -144,27 +155,35 @@ namespace RefTest.OSC
         private bool ReadCalibrationData() => true;
         private bool TryRecalib() => true;
 
-        public bool SetSampleRate(YTFormat format) => true;
-        public bool SetSampleRate(TimeDiv td, YTFormat format) => true;
+        public async Task<bool> SetSampleRate(YTFormat format) => await Task.Run(() => true);
+        public async Task<bool> SetSampleRate(TimeDiv td, YTFormat format) => await Task.Run(() => true);
+        public async Task<bool> SetSampleRate(TimeDiv td) => await Task.Run(() => true);
         public float GetSampleRate() => 1000.0f;
         public TimeDiv GetTimeDiv() => TimeDiv.ns200;
         public VoltDiv GetVoltDiv() => VoltDiv.V8;
-        public bool SetVoltDiv(VoltDiv vd) => true;
+        public async Task<bool> SetVoltDiv(VoltDiv vd) => await Task.Run(() => true);
         public ushort GetVTriggerLevel() => vTriggerPos;
         public ushort GetHTriggerLevel() => hTriggerPos;
-        public bool SetVTriggerLevel(byte level)
+        public async Task<bool> SetVTriggerLevel(byte level)
         {
-            var tl = ushort.Parse(level.ToString());
-            vTriggerPos = tl;
-            return true;
+            return await Task.Run(() =>
+            {
+                var tl = ushort.Parse(level.ToString());
+                vTriggerPos = tl;
+                return true;
+            });
         }
-        public bool SetHTriggerLevel(byte level)
+        public async Task<bool> SetHTriggerLevel(byte level)
         {
-            var tl = ushort.Parse(level.ToString());
-            hTriggerPos = tl;
-            return true;
+            return await Task.Run(() =>
+            {
+                var tl = ushort.Parse(level.ToString());
+                hTriggerPos = tl;
+                return true;
+            });
+
         }
-        public bool SetTriggerLevel(byte hLevel, byte vLevel) => SetVTriggerLevel(vLevel) && SetHTriggerLevel(hLevel);
+        public async Task<bool> SetTriggerLevel(byte hLevel, byte vLevel) => await SetVTriggerLevel(vLevel) && await SetHTriggerLevel(hLevel);
         public ushort[] GetData() => ch1;
         void OnDataReceived()
         {
