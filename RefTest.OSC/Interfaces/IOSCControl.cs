@@ -7,21 +7,16 @@ using System.Threading.Tasks;
 namespace RefTest.OSC.Interfaces
 {
     public delegate void OSCDataReceivedEventHandler(ushort[] data);
-    public delegate void OSCConnectStateChangeEventHandler(bool connectState, int faultCounter);
-    public interface IOSCControl
+    
+    public interface IOSCControl : IControl
     {
         event OSCDataReceivedEventHandler DataReceived;
-        event OSCConnectStateChangeEventHandler ConnectStateChange;
+        
 
-        bool SingleConnect { get; set; }
-        bool AutoInit { get; set; }
-
+       
         OSCStates State { get; }
 
-        void Connect();
-        void StopConnect();
-        void PauseConnect();
-        void ResumeConnect();
+     
         ushort GetVersion();
         Task<bool> Init();
         float GetSampleRate();
