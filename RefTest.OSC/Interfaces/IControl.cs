@@ -11,7 +11,6 @@ namespace RefTest.OSC.Interfaces
     {
         event ControlConnectStateChangeEventHandler ConnectStateChange;
         bool SingleConnect { get; set; }
-        bool AutoInit { get; set; }
         void Connect();
         void StopConnect();
         void PauseConnect();

@@ -7,7 +7,10 @@ namespace RefTest.OSC
     public class ARMControl : IARMControl
     {
         public SerialPort Port { get; set; }
-        
+        public bool SingleConnect { get; set; }
+        public bool AutoInit { get; set; }
+
+        public event ControlConnectStateChangeEventHandler ConnectStateChange;
 
         public async Task<bool> GetState()
         {
@@ -60,6 +63,26 @@ namespace RefTest.OSC
             }
             catch (Exception) { return false; }
             return true;
+        }
+
+        void IControl.Connect()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void StopConnect()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void PauseConnect()
+        {
+            throw new NotImplementedException();
+        }
+
+        public void ResumeConnect()
+        {
+            throw new NotImplementedException();
         }
     }
 }

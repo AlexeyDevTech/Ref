@@ -11,12 +11,10 @@ namespace RefTest.OSC.Interfaces
     public interface IOSCControl : IControl
     {
         event OSCDataReceivedEventHandler DataReceived;
-        
-
        
         OSCStates State { get; }
 
-     
+
         ushort GetVersion();
         Task<bool> Init();
         float GetSampleRate();
