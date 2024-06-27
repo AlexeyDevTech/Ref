@@ -6,19 +6,23 @@ using RefTest.OSC.Structs;
 
 namespace RefTest.OSC
 {
-    public class OSCControl : OSCControlBase, IOSCControl
+    public class OSCControl : IOSCControl
     {
         public event OSCDataReceivedEventHandler DataReceived;
-        public event ControlConnectStateChangeEventHandler ConnectStateChange;
+        public event OSCConnectStateChangeEventHandler ConnectStateChange;
         CancellationTokenSource comCts;
         CancellationTokenSource cts;
         CancellationToken ct;
         Task WorkerTask;
         ManualResetEvent WorkerWaiter = new ManualResetEvent(true);
         ManualResetEvent CommandWaiter = new ManualResetEvent(true);
-       
+        ManualResetEvent ConnectWaiter = new ManualResetEvent(true);
         ConcurrentQueue<Func<Task>> WorkerQueue = new ConcurrentQueue<Func<Task>>();
 
+
+
+
+        bool IsConnect = false;
         bool IsBusy = false;
         public bool SingleConnect { get; set; } = false; //возможность управлять потоком подключения, либо после
                                                          //запуска он останавливается, 
@@ -29,7 +33,7 @@ namespace RefTest.OSC
 
         private static OSCControl _instance;
         int failConnectCounter = 3;
-        
+        int faultCounter = 0;                   //регистрирует количество неудачных попыток подключения
         ushort deviceIndex = 32;                //значение по умолчанию (Init() == false если ничего не нашел)
         ushort ver = 0;
         ushort chMode = 1;
@@ -80,7 +84,7 @@ namespace RefTest.OSC
             nTrigSource = 0,
             nALT = 0
         };
-       
+        private bool CanConnectWorker = false;
         private object _locker = new object();
 
         public static OSCControl Instance
@@ -99,9 +103,49 @@ namespace RefTest.OSC
 
         private OSCControl()
         {
+            comCts = new CancellationTokenSource();
+            Task.Factory.StartNew(CommandWorker, comCts.Token, TaskCreationOptions.LongRunning, TaskScheduler.Current);
+        }
 
-            ConnectAction = async () =>
+        private async Task CommandWorker()
+        {
+            while (true)
             {
+                try
+                {
+                    if (State >= OSCStates.Inited)
+                    {
+                        if (!IsBusy)
+                        {
+                            if (WorkerQueue.TryDequeue(out var operation))
+                            {
+                                CommandWaiter.Reset();
+                                await operation();
+                                await Task.Delay(10);
+                                CommandWaiter.Set();
+                            }
+                            else await Task.Delay(100);
+                        }
+                        else await Task.Delay(10);
+                    }
+                    else
+                    {
+                        await Task.Delay(100);
+                    }
+                }
+                catch (Exception ex)
+                {
+
+                }
+                await Task.Delay(50);
+            }
+        }
+
+        private async void ConnectWorker()
+        {
+            while (CanConnectWorker)
+            {
+                ConnectWaiter.WaitOne();
                 if (!IsConnect) //Если не подключено
                 {
                     if (SearchDeviceIndex(out deviceIndex)) //поиск устройства 
@@ -139,49 +183,18 @@ namespace RefTest.OSC
                         if (SingleConnect)
                         {
                             StopConnect();
+                            break;
                         }
                     }
                 }
-            };
-            comCts = new CancellationTokenSource();
-            Task.Factory.StartNew(CommandWorker, comCts.Token, TaskCreationOptions.LongRunning, TaskScheduler.Current);
+
+                await Task.Delay(1000);
+            }
         }
 
-       
-        
-
-        private async Task CommandWorker()
+        private void OnConnectStateChange()
         {
-            while (true)
-            {
-                try
-                {
-                    if (State >= OSCStates.Inited)
-                    {
-                        if (!IsBusy)
-                        {
-                            if (WorkerQueue.TryDequeue(out var operation))
-                            {
-                                CommandWaiter.Reset();
-                                await operation();
-                                await Task.Delay(10);
-                                CommandWaiter.Set();
-                            }
-                            else await Task.Delay(100);
-                        }
-                        else await Task.Delay(10);
-                    }
-                    else
-                    {
-                        await Task.Delay(100);
-                    }
-                }
-                catch (Exception ex)
-                {
-
-                }
-                await Task.Delay(50);
-            }
+            ConnectStateChange?.Invoke(IsConnect, faultCounter);
         }
 
         private void FailConnectRegister()
@@ -256,10 +269,14 @@ namespace RefTest.OSC
 
         }
 
-        public override void Connect()
+        public void Connect()
         {
-            base.Connect();
+            CanConnectWorker = true;
+            Task.Run(ConnectWorker);
         }
+        public void StopConnect() => CanConnectWorker = false;
+        public void PauseConnect() => ConnectWaiter.Reset();
+        public void ResumeConnect() => ConnectWaiter.Set();
 
         public async Task<bool> Init()
         {

@@ -65,24 +65,6 @@ namespace RefTest.OSC
             return true;
         }
 
-        void IControl.Connect()
-        {
-            throw new NotImplementedException();
-        }
-
-        public void StopConnect()
-        {
-            throw new NotImplementedException();
-        }
-
-        public void PauseConnect()
-        {
-            throw new NotImplementedException();
-        }
-
-        public void ResumeConnect()
-        {
-            throw new NotImplementedException();
-        }
+        
     }
 }
