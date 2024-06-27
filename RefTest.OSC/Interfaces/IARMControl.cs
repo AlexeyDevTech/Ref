@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace RefTest.OSC.Interfaces
 {
-    public interface IARMControl : IControl
+    public interface IARMControl
     {
         Task<bool> GetState();
         Task<bool> SetAmplitude(int vol);

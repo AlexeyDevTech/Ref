@@ -20,13 +20,21 @@ namespace RefTest.OSC
         public async Task<bool> Connect()
         {
             var baudRate = 115200;
-            var finder = new SerialPortFinder();
-            var portName = await finder.FindDeviceAsync("R120#", "R120_OK", baudRate);
+            //var finder = new SerialPortFinder();
+            var portName = await SerialPortFinder.FindDeviceAsync("R120#", "R120_OK", baudRate);
             if (!portName.Contains("Device not found."))
             {
-                Port = new SerialPort(portName, baudRate);
-                
-                return true;
+                try
+                {
+                    Port = new SerialPort(portName, baudRate);
+                    Port.Open();
+                    await Task.Delay(50);
+                    if (Port.IsOpen)
+                        return true;
+                    else return false;
+
+                }
+                catch (Exception) { return false; }
             }
             else return false;
         }

@@ -15,7 +15,9 @@ namespace RefTest.OSC.Helpers
         private static int readTimeout = 100; // in milliseconds
         private static int writeTimeout = 100; // in milliseconds
 
-        public async Task<string> FindDeviceAsync(string exceptedRequest, string expectedResponse, int baudRate = 9600)
+
+
+        public static async Task<string> FindDeviceAsync(string exceptedRequest, string expectedResponse, int baudRate = 9600)
         {
             string[] portNames = SerialPort.GetPortNames();
             var cts = new CancellationTokenSource();
@@ -23,7 +25,9 @@ namespace RefTest.OSC.Helpers
             string foundPort = null;
             try
             {
-                foundPort = (await Task.WhenAny(tasks)).Result;
+                var FT = await Task.WhenAny(tasks);
+                foundPort = FT.Result;
+                await Console.Out.WriteLineAsync($"found task:{FT.Status}");
                 if (foundPort != null)
                 {
                     cts.Cancel(); // Отмена остальных задач, если устройство найдено
@@ -34,11 +38,11 @@ namespace RefTest.OSC.Helpers
                 Console.WriteLine($"Exception in task: {ex.Message}");
             }
             await Task.WhenAll(tasks); // Дождаться завершения всех задач, чтобы обработать отмененные задачи корректно
-
+            await Console.Out.WriteLineAsync($"FP: {foundPort}");
             return foundPort ?? "Device not found.";
         }
 
-        private async Task<string> TryFindDeviceOnPort(string portName, string exceptedRequest, string expectedResponse, int baudRate, CancellationToken token)
+        private static async Task<string> TryFindDeviceOnPort(string portName, string exceptedRequest, string expectedResponse, int baudRate, CancellationToken token)
         {
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
@@ -57,12 +61,13 @@ namespace RefTest.OSC.Helpers
                         port.Open();
                         await Task.Delay(50); // delay for establishing connection
 
-                        port.WriteLine(exceptedRequest); // send command to check device
-                        string response = await Task.Run(() => port.ReadLine());
+                        port.Write(exceptedRequest); // send command to check device
+                        string response = await Task.Run(() => port.ReadExisting());
 
                         if (response.Contains(expectedResponse))
                         {
                             Console.WriteLine($"Device found on port {portName}");
+                            port.Close();
                             return portName;
                         }
                     }

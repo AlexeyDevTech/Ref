@@ -9,7 +9,7 @@ namespace RefTest.OSC
     public class OSCControl : IOSCControl
     {
         public event OSCDataReceivedEventHandler DataReceived;
-        public event OSCConnectStateChangeEventHandler ConnectStateChange;
+        public event ControlConnectStateChangeEventHandler ConnectStateChange;
         CancellationTokenSource comCts;
         CancellationTokenSource cts;
         CancellationToken ct;
