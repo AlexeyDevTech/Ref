@@ -1,21 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Concurrent;
 using System.IO.Ports;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace RefTest.OSC.Helpers
 {
+    public delegate void PortFindEventHandler(string device, string PortName, bool isEnd);
     public class SerialPortFinder
     {
-        private static int maxRetries = 3;
+        public event PortFindEventHandler PortFind;
+        private static int maxRetries = 5;
         private static int retryDelay = 200; // in milliseconds
         private static int readTimeout = 100; // in milliseconds
         private static int writeTimeout = 100; // in milliseconds
 
-
+        private static ConcurrentQueue<DeviceInfo> SearchDevices = new ConcurrentQueue<DeviceInfo>();
 
         public static async Task<string> FindDeviceAsync(string exceptedRequest, string expectedResponse, int baudRate = 9600)
         {
@@ -25,9 +22,7 @@ namespace RefTest.OSC.Helpers
             string foundPort = null;
             try
             {
-                var FT = await Task.WhenAny(tasks);
-                foundPort = FT.Result;
-                await Console.Out.WriteLineAsync($"found task:{FT.Status}");
+                foundPort = (await Task.WhenAny(tasks)).Result;
                 if (foundPort != null)
                 {
                     cts.Cancel(); // Отмена остальных задач, если устройство найдено
@@ -38,7 +33,7 @@ namespace RefTest.OSC.Helpers
                 Console.WriteLine($"Exception in task: {ex.Message}");
             }
             await Task.WhenAll(tasks); // Дождаться завершения всех задач, чтобы обработать отмененные задачи корректно
-            await Console.Out.WriteLineAsync($"FP: {foundPort}");
+
             return foundPort ?? "Device not found.";
         }
 
@@ -61,13 +56,12 @@ namespace RefTest.OSC.Helpers
                         port.Open();
                         await Task.Delay(50); // delay for establishing connection
 
-                        port.Write(exceptedRequest); // send command to check device
+                        port.WriteLine(exceptedRequest); // send command to check device
                         string response = await Task.Run(() => port.ReadExisting());
 
                         if (response.Contains(expectedResponse))
                         {
                             Console.WriteLine($"Device found on port {portName}");
-                            port.Close();
                             return portName;
                         }
                     }
@@ -80,9 +74,83 @@ namespace RefTest.OSC.Helpers
                         await Task.Delay(retryDelay);
                     }
                 }
+                finally
+                {
+                    
+                }
             }
 
             return null;
         }
+
+        private static async Task<string> TryFindDevicesOnPort(string portName, CancellationToken token)
+        {
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    Console.WriteLine($"Task for port {portName} was cancelled.");
+                    break;
+                }
+                try
+                {
+                    using (SerialPort port = new SerialPort(portName))
+                    {
+                        foreach (var dev in SearchDevices)
+                        {
+                            port.ReadTimeout = readTimeout;
+                            port.WriteTimeout = writeTimeout;
+                            port.BaudRate = dev.BaudRate;
+                            port.Open();
+                            await Task.Delay(50); // delay for establishing connection
+
+                            port.WriteLine(dev.Request); // send command to check device
+                            string response = await Task.Run(() => port.ReadExisting());
+
+                            if (response.Contains(dev.Response))
+                            {
+                                Console.WriteLine($"Device found on port {portName}");
+                                return portName;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Attempt {attempt} on port {portName} failed: {ex.Message}");
+                    if (attempt < maxRetries)
+                    {
+                        await Task.Delay(retryDelay);
+                    }
+                }
+                finally
+                {
+
+                }
+            }
+
+            return null;
+        }
+
+
+        public static void AddDeviceToSearch(string Name, string Request, string Response)
+        {
+            SearchDevices.Enqueue(new DeviceInfo { Name = Name, Request = Request, Response = Response });
+        }
+        public static async Task StartSearch()
+        {
+
+        }
+
+    }
+
+    public class DeviceInfo
+    {
+        public string Name { get; set; }
+        public string Request { get; set; }
+        public string Response { get; set; }
+        public int BaudRate { get; set; }
+        public string PortName { get; set; }
+
     }
 }

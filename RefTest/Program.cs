@@ -44,21 +44,21 @@ namespace RefTest
                 var sw = new Stopwatch();
                 sw.Start();
                 var t2 = SerialPortFinder.FindDeviceAsync("R120#", "R120_OK", 115200);
-                var t1 = SerialPortFinder.FindDeviceAsync("#LAB?", "AngstremLabController", 115200);
-                var t3 = SerialPortFinder.FindDeviceAsync("#LAB?", "Power Selector", 115200);
+                //var t1 = SerialPortFinder.FindDeviceAsync("#LAB?", "AngstremLabController", 9600);
+                //var t3 = SerialPortFinder.FindDeviceAsync("#LAB?", "Power Selector", 115200);
 
-                await Task.WhenAll(t1, t2, t3);
+                //await Task.WhenAll(t1, t2, t3);
 
 
-                if (await t1 != "Device not found.")
-                    await Console.Out.WriteLineAsync($"success MEA");
-                else await Console.Out.WriteLineAsync($"fail MEA");
+                //if (await t1 != "Device not found.")
+                //    await Console.Out.WriteLineAsync($"success MEA");
+                //else await Console.Out.WriteLineAsync($"fail MEA");
                 if (await t2 != "Device not found.")
                     await Console.Out.WriteLineAsync($"success Ref");
                 else await Console.Out.WriteLineAsync($"fail Ref");
-                if (await t3 != "Device not found.")
-                    await Console.Out.WriteLineAsync($"success PS");
-                else await Console.Out.WriteLineAsync($"fail PS");
+                //if (await t3 != "Device not found.")
+                //    await Console.Out.WriteLineAsync($"success PS");
+                //else await Console.Out.WriteLineAsync($"fail PS");
                 //var f = await control.Connect();
                 //if (f)
                 //{
