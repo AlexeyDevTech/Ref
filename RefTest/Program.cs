@@ -39,26 +39,48 @@ namespace RefTest
                 #endregion
 
                 var control = new ARMControl();
-                
-                
+
+
                 var sw = new Stopwatch();
                 sw.Start();
-                var t2 = SerialPortFinder.FindDeviceAsync("R120#", "R120_OK", 115200);
-                //var t1 = SerialPortFinder.FindDeviceAsync("#LAB?", "AngstremLabController", 9600);
-                //var t3 = SerialPortFinder.FindDeviceAsync("#LAB?", "Power Selector", 115200);
 
-                //await Task.WhenAll(t1, t2, t3);
+                SerialPortFinder.AddDeviceToSearch("MEA", "#LAB?", "AngstremLabController");
+                SerialPortFinder.AddDeviceToSearch("PS", "#LAB?", "Power Selector");
+                SerialPortFinder.AddDeviceToSearch("Ref", "R120#", "R120_OK", 115200);
+                SerialPortFinder.PortFind += SerialPortFinder_PortFind;
+                SerialPortFinder.PortFindCompleted += SerialPortFinder_PortFindCompleted;
+
+                var devs = await SerialPortFinder.StartSearch();
+                if (devs != null)
+                {
+                    await Console.Out.WriteLineAsync($"result:\n\t");
+                    foreach (var dev in devs)
+                    {
+                        await Console.Out.WriteAsync($"device: {dev.Name}\n\t");
+                        await Console.Out.WriteAsync($"PortName: {dev.PortName}\n\t");
+                        await Console.Out.WriteAsync($"BaudRate: {dev.BaudRate}\n\t");
+                        await Console.Out.WriteLineAsync();
+
+                    }
+                }
+                else await Console.Out.WriteLineAsync("devices not found");
+
+                //var t2 = SerialPortFinder.FindDeviceAsync("R120#", "R120_OK", 115200);
+                ////var t1 = SerialPortFinder.FindDeviceAsync("#LAB?", "AngstremLabController", 9600);
+                ////var t3 = SerialPortFinder.FindDeviceAsync("#LAB?", "Power Selector", 115200);
+
+                ////await Task.WhenAll(t1, t2, t3);
 
 
-                //if (await t1 != "Device not found.")
-                //    await Console.Out.WriteLineAsync($"success MEA");
-                //else await Console.Out.WriteLineAsync($"fail MEA");
-                if (await t2 != "Device not found.")
-                    await Console.Out.WriteLineAsync($"success Ref");
-                else await Console.Out.WriteLineAsync($"fail Ref");
-                //if (await t3 != "Device not found.")
-                //    await Console.Out.WriteLineAsync($"success PS");
-                //else await Console.Out.WriteLineAsync($"fail PS");
+                ////if (await t1 != "Device not found.")
+                ////    await Console.Out.WriteLineAsync($"success MEA");
+                ////else await Console.Out.WriteLineAsync($"fail MEA");
+                //if (await t2 != "Device not found.")
+                //    await Console.Out.WriteLineAsync($"success Ref");
+                //else await Console.Out.WriteLineAsync($"fail Ref");
+                ////if (await t3 != "Device not found.")
+                ////    await Console.Out.WriteLineAsync($"success PS");
+                ////else await Console.Out.WriteLineAsync($"fail PS");
                 //var f = await control.Connect();
                 //if (f)
                 //{
@@ -96,6 +118,16 @@ namespace RefTest
                 Debug.Write("error");
             }
             //Console.ReadKey();
+        }
+
+        private static async void SerialPortFinder_PortFindCompleted(int countFindedDevices, bool isError)
+        {
+            await Console.Out.WriteLineAsync($"port search is completed. devices founded: {countFindedDevices} Error = {isError}");
+        }
+
+        private static async void SerialPortFinder_PortFind(string device, string PortName)
+        {
+            await Console.Out.WriteLineAsync($"++++Device {device} has been found in {PortName}.+++++");
         }
 
         public static async Task<bool> Connect(string request, string responce, int baudrate = 9600)

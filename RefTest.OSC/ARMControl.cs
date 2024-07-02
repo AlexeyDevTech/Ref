@@ -11,13 +11,15 @@ namespace RefTest.OSC
         public bool AutoInit { get; set; }
 
         public event ControlConnectStateChangeEventHandler ConnectStateChange;
+        ManualResetEvent ConnectWaiter = new ManualResetEvent(true);
+
 
         public async Task<bool> GetState()
         {
             return await SetCommand("get_state", "State");
         }
 
-        public async Task<bool> Connect()
+        public async Task<bool> ConnectPort()
         {
             var baudRate = 115200;
             //var finder = new SerialPortFinder();
