@@ -17,33 +17,37 @@ namespace RefTest.OSC.Helpers
         private static ConcurrentQueue<DeviceInfo> SearchDevices = new ConcurrentQueue<DeviceInfo>();
 
         public static bool SingleSearchExecuted { get; private set; }
+        public static bool MultiSearchExecuted { get; private set; }
 
         public static async Task<string> FindDeviceAsync(string exceptedRequest, string expectedResponse, int baudRate = 9600)
         {
-            SingleSearchExecuted = true;
-            string[] portNames = SerialPort.GetPortNames();
-            var cts = new CancellationTokenSource();
-            var tasks = portNames.Select(portName => Task.Run(() => TryFindDeviceOnPort(portName, exceptedRequest, expectedResponse, baudRate, cts.Token))).ToArray();
-            string foundPort = null;
-            try
+            if (!MultiSearchExecuted)
             {
-                foundPort = (await Task.WhenAny(tasks)).Result;
-                if (foundPort != null)
+                SingleSearchExecuted = true;
+                string[] portNames = SerialPort.GetPortNames();
+                var cts = new CancellationTokenSource();
+                var tasks = portNames.Select(portName => Task.Run(() => TryFindDeviceOnPort(portName, exceptedRequest, expectedResponse, baudRate, cts.Token))).ToArray();
+                string foundPort = null;
+                try
                 {
-                    cts.Cancel(); // Отмена остальных задач, если устройство найдено
+                    foundPort = (await Task.WhenAny(tasks)).Result;
+                    if (foundPort != null)
+                    {
+                        cts.Cancel(); // Отмена остальных задач, если устройство найдено
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Exception in task: {ex.Message}");
-            }
-            finally
-            {
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Exception in task: {ex.Message}");
+                }
+                finally
+                {
+                    SingleSearchExecuted = false;
+                }
+                await Task.WhenAll(tasks); // Дождаться завершения всех задач, чтобы обработать отмененные задачи корректно
                 SingleSearchExecuted = false;
-            }
-            await Task.WhenAll(tasks); // Дождаться завершения всех задач, чтобы обработать отмененные задачи корректно
-            SingleSearchExecuted = false;
-            return foundPort ?? "Device not found.";
+                return foundPort ?? "Device not found.";
+            } else throw new InvalidOperationException("Данный метод нельзя выполнить сейчас. Выполняется множественный поиск устройств.");
         }
 
         private static async Task<string> TryFindDeviceOnPort(string portName, string exceptedRequest, string expectedResponse, int baudRate, CancellationToken token)
@@ -170,9 +174,10 @@ namespace RefTest.OSC.Helpers
                     PortFindCompleted?.Invoke(cdf?.Length ?? 0, true);
                     return null;
                 }
-            } else throw new InvalidOperationException("Данный момент нельзя выполнить сейчас. Выполняется единичный поиск устройства.")
-
             }
+            else throw new InvalidOperationException("Данный метод нельзя выполнить сейчас. Выполняется единичный поиск устройства.");
+
+        }
 
         }
 

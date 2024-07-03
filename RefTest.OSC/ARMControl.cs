@@ -10,9 +10,76 @@ namespace RefTest.OSC
         public bool SingleConnect { get; set; }
         public bool AutoInit { get; set; }
 
+        private bool CanConnectWorker = false;
+
         public event ControlConnectStateChangeEventHandler ConnectStateChange;
         ManualResetEvent ConnectWaiter = new ManualResetEvent(true);
+        private bool IsConnect = false;
+        private int faultCounter;
 
+        private async void ConnectWorker()
+        {
+            while (CanConnectWorker)
+            {
+                ConnectWaiter.WaitOne();
+                if (!IsConnect) //Если не подключено
+                {
+                    if (await ConnectPort()) //поиск устройства 
+                    {
+                        Console.WriteLine("Подключение установлено");
+                        IsConnect = true;
+                        faultCounter = 0;
+                        OnConnectStateChange();
+                    }
+                    else    //если не нашел
+                    {
+                        faultCounter++;
+                        OnConnectStateChange();
+                    }
+                }
+                else
+                {
+                    //некая полезная нагрузка 
+
+                    var is_con = PortIsExist();
+                    if (!is_con)
+                    {
+                        Console.WriteLine("Подключение разорвано");
+                        IsConnect = false;
+                        OnConnectStateChange();
+                        if (SingleConnect)
+                        {
+                            StopConnect();
+                            break;
+                        }
+                    }
+                }
+                await Task.Delay(2000);
+            }
+        }
+
+        private void OnConnectStateChange()
+        {
+            ConnectStateChange?.Invoke(IsConnect, faultCounter);
+        }
+
+        public void Connect()
+        {
+            CanConnectWorker = true;
+            Task.Run(ConnectWorker);
+        }
+        public void StopConnect()
+        {
+            CanConnectWorker = false;
+        }
+        public void PauseConnect()
+        {
+            ConnectWaiter.Set();
+        }
+        public void ResumeConnect()
+        {
+            ConnectWaiter.Reset();
+        }
 
         public async Task<bool> GetState()
         {
@@ -31,14 +98,35 @@ namespace RefTest.OSC
                     Port = new SerialPort(portName, baudRate);
                     Port.Open();
                     await Task.Delay(50);
-                    if (Port.IsOpen)
-                        return true;
-                    else return false;
+                    return Port.IsOpen ? true : false;
+                        
 
                 }
                 catch (Exception) { return false; }
             }
             else return false;
+        }
+        public async Task<bool> PortIsExist()
+        {
+            var res = false;
+            //var ports = SerialPort.GetPortNames();
+            //return ports.FirstOrDefault(x => x == Port.PortName) != null;
+            try
+            {
+                int fcounter = 3;
+                if (Port.IsOpen)
+                {
+                    Port.Write("?000#");
+                    await Task.Delay(20);
+                    var msg = Port.ReadExisting();
+                    if (!string.IsNullOrEmpty(msg)) res = true;
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+            return res;
         }
 
         public async Task<bool> SetAmplitude(int vol) => await SetCommand($"V{vol:D3}#", $"V{vol:D3}_OK");

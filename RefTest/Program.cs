@@ -8,7 +8,8 @@ namespace RefTest
 {
     internal class Program
     {
-        public static SerialPort Port;
+        private static bool old_connectState;
+        public static ARMControl control = new ARMControl();
         static async Task Main(string[] args)
         {
             try
@@ -38,32 +39,33 @@ namespace RefTest
                 //OSCControlFactory.Instance.Connect();
                 #endregion
 
-                var control = new ARMControl();
-
+                
+                control.ConnectStateChange += Control_ConnectStateChange;
+                control.Connect();
 
                 var sw = new Stopwatch();
                 sw.Start();
 
-                SerialPortFinder.AddDeviceToSearch("MEA", "#LAB?", "AngstremLabController");
-                SerialPortFinder.AddDeviceToSearch("PS", "#LAB?", "Power Selector");
-                SerialPortFinder.AddDeviceToSearch("Ref", "R120#", "R120_OK", 115200);
-                SerialPortFinder.PortFind += SerialPortFinder_PortFind;
-                SerialPortFinder.PortFindCompleted += SerialPortFinder_PortFindCompleted;
+                //SerialPortFinder.AddDeviceToSearch("MEA", "#LAB?", "AngstremLabController");
+                //SerialPortFinder.AddDeviceToSearch("PS", "#LAB?", "Power Selector");
+                //SerialPortFinder.AddDeviceToSearch("Ref", "R120#", "R120_OK", 115200);
+                //SerialPortFinder.PortFind += SerialPortFinder_PortFind;
+                //SerialPortFinder.PortFindCompleted += SerialPortFinder_PortFindCompleted;
 
-                var devs = await SerialPortFinder.StartSearch();
-                if (devs != null)
-                {
-                    await Console.Out.WriteLineAsync($"result:\n\t");
-                    foreach (var dev in devs)
-                    {
-                        await Console.Out.WriteAsync($"device: {dev.Name}\n\t");
-                        await Console.Out.WriteAsync($"PortName: {dev.PortName}\n\t");
-                        await Console.Out.WriteAsync($"BaudRate: {dev.BaudRate}\n\t");
-                        await Console.Out.WriteLineAsync();
+                //var devs = await SerialPortFinder.StartSearch();
+                //if (devs != null)
+                //{
+                //    await Console.Out.WriteLineAsync($"result:\n\t");
+                //    foreach (var dev in devs)
+                //    {
+                //        await Console.Out.WriteAsync($"device: {dev.Name}\n\t");
+                //        await Console.Out.WriteAsync($"PortName: {dev.PortName}\n\t");
+                //        await Console.Out.WriteAsync($"BaudRate: {dev.BaudRate}\n\t");
+                //        await Console.Out.WriteLineAsync();
 
-                    }
-                }
-                else await Console.Out.WriteLineAsync("devices not found");
+                //    }
+                //}
+                //else await Console.Out.WriteLineAsync("devices not found");
 
                 //var t2 = SerialPortFinder.FindDeviceAsync("R120#", "R120_OK", 115200);
                 ////var t1 = SerialPortFinder.FindDeviceAsync("#LAB?", "AngstremLabController", 9600);
@@ -109,7 +111,12 @@ namespace RefTest
                 //    //await Task.Delay(20);
                 //    if (await control.SetChannel(1)) await Console.Out.WriteLineAsync("set 1 OK");
                 //}
+
+
+
+                Console.ReadKey();
                 await Console.Out.WriteLineAsync($"time: {sw.Elapsed}");
+
                 sw.Stop();
 
             }
@@ -118,6 +125,20 @@ namespace RefTest
                 Debug.Write("error");
             }
             //Console.ReadKey();
+        }
+
+        private static async void Control_ConnectStateChange(bool state, int faultCounter)
+        {
+            if (state)
+            {
+                await Console.Out.WriteLineAsync($"ARM Connected!");
+            } else
+            {
+                if (old_connectState) control.Connect();
+            }
+            old_connectState = state;
+
+
         }
 
         private static async void SerialPortFinder_PortFindCompleted(int countFindedDevices, bool isError)
@@ -130,26 +151,26 @@ namespace RefTest
             await Console.Out.WriteLineAsync($"++++Device {device} has been found in {PortName}.+++++");
         }
 
-        public static async Task<bool> Connect(string request, string responce, int baudrate = 9600)
-        {
-            //var finder = new SerialPortFinder();
-            var portName = await SerialPortFinder.FindDeviceAsync(request, responce, baudrate);
-            if (!portName.Contains("Device not found."))
-            {
-                try
-                {
-                    Port = new SerialPort(portName, baudrate);
-                    Port.Open();
-                    await Task.Delay(50);
-                    if (Port.IsOpen)
-                        return true;
-                    else return false;
+        //public static async Task<bool> Connect(string request, string responce, int baudrate = 9600)
+        //{
+        //    //var finder = new SerialPortFinder();
+        //    var portName = await SerialPortFinder.FindDeviceAsync(request, responce, baudrate);
+        //    if (!portName.Contains("Device not found."))
+        //    {
+        //        try
+        //        {
+        //            Port = new SerialPort(portName, baudrate);
+        //            Port.Open();
+        //            await Task.Delay(50);
+        //            if (Port.IsOpen)
+        //                return true;
+        //            else return false;
 
-                }
-                catch (Exception) { return false; }
-            }
-            else return false;
-        }
+        //        }
+        //        catch (Exception) { return false; }
+        //    }
+        //    else return false;
+        //}
 
 
     }
